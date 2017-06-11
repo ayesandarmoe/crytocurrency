@@ -1,3 +1,5 @@
+import java.util.ArrayList;
+
 public class TxHandler {
 
     /**
@@ -5,8 +7,11 @@ public class TxHandler {
      * {@code utxoPool}. This should make a copy of utxoPool by using the UTXOPool(UTXOPool uPool)
      * constructor.
      */
+	UTXOPool current;
+
     public TxHandler(UTXOPool utxoPool) {
         // IMPLEMENT THIS
+		current = new UTXOPool(utxoPool);
     }
 
     /**
@@ -20,6 +25,39 @@ public class TxHandler {
      */
     public boolean isValidTx(Transaction tx) {
         // IMPLEMENT THIS
+		double totalOutputValue = 0.0;
+		double totalInputValue = 0.0;
+		ArrayList<UTXO> claimed = new ArrayList<UTXO>();
+		
+		// Check (2) and (3)
+		for (Transaction.Input i : tx.getInputs()){
+			Transaction.Output o = tx.getOutputs().get(i.outputIndex); 
+			if (!Crypto.verifySignature(o.address, tx.getRawDataToSign(i.outputIndex), i.signature)){
+				//validTx = false;
+				return false;
+			}else{ // (3)
+				totalInputValue += o.value;
+				if (claimed.contains(i.prevTxHash)){ //if this utxo is already claimed
+					return false;
+				}else{// (1)
+					for (UTXO utxo : current.getAllUTXO()){
+						if (i.prevTxHash != utxo.getTxHash() ){
+							return false;
+						}else{ // (4)
+							if (o.value < 0){
+								return false;
+							}else{
+								totalOutputValue += o.value;
+							}
+						}
+					}
+				}
+			}
+		}
+
+
+		// Check (5)
+		return ( totalInputValue >= totalOutputValue);
     }
 
     /**
@@ -29,6 +67,27 @@ public class TxHandler {
      */
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
         // IMPLEMENT THIS
+		ArrayList<Transaction> validTxs = new ArrayList<Transaction>();
+		for (Transaction tx : possibleTxs){
+			if (isValidTx(tx)){
+				// get a list of Inputs and remove it from the UTOPool
+				for (Transaction.Input i  : tx.getInputs()){
+					Transaction.Output o = tx.getOutputs().get(i.outputIndex); 
+
+					for (UTXO utxo :current.getAllUTXO()){
+						if (current.getTxOutput(utxo) == o ){
+							current.removeUTXO(utxo);
+						}
+					}
+				}
+				validTxs.add(tx);
+			}
+		}
+		Transaction[] toReturn = new Transaction[validTxs.size()];
+		for (int i =0; i < validTxs.size(); i++){
+			toReturn[i] = validTxs.get(i);
+		}
+		return toReturn;
     }
 
 }
