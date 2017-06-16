@@ -28,30 +28,41 @@ public class TxHandler {
 		double totalOutputValue = 0.0;
 		double totalInputValue = 0.0;
 		ArrayList<UTXO> claimed = new ArrayList<UTXO>();
-		
-		// Check (2) and (3)
+	
+
 		for (Transaction.Input i : tx.getInputs()){
-			Transaction.Output o = tx.getOutputs().get(i.outputIndex); 
-			if (!Crypto.verifySignature(o.address, tx.getRawDataToSign(i.outputIndex), i.signature)){
-				//validTx = false;
+			UTXO prevUtxo = new UTXO(i.prevTxHash, i.outputIndex);
+			if ( !current.contains(prevUtxo) ){ // Check 1
+				return false;	
+			}
+			// Check 2
+			Transaction.Output o = current.getTxOutput(prevUtxo);
+			if ( o.address == null || i.outputIndex < 0 ){
 				return false;
-			}else{ // (3)
+			}
+			byte[] message = tx.getRawDataToSign(tx.getInputs().indexOf(i));
+			if( message == null ){
+				return false;
+			}
+			if (!Crypto.verifySignature(o.address, message, i.signature)){
+				return false;
+			}else{
 				totalInputValue += o.value;
-				if (claimed.contains(i.prevTxHash)){ //if this utxo is already claimed
-					return false;
-				}else{// (1)
-					for (UTXO utxo : current.getAllUTXO()){
-						if (i.prevTxHash != utxo.getTxHash() ){
-							return false;
-						}else{ // (4)
-							if (o.value < 0){
-								return false;
-							}else{
-								totalOutputValue += o.value;
-							}
-						}
-					}
-				}
+			}
+			//Check 3
+			if ( claimed.contains(prevUtxo) ){
+				return false;
+			}else{
+				claimed.add(prevUtxo);
+			}
+			
+		}
+
+		for (Transaction.Output o : tx.getOutputs()){
+			if ( o.value < 0 ){
+				return false;
+			}else{
+				totalOutputValue += o.value;
 			}
 		}
 
@@ -72,12 +83,10 @@ public class TxHandler {
 			if (isValidTx(tx)){
 				// get a list of Inputs and remove it from the UTOPool
 				for (Transaction.Input i  : tx.getInputs()){
-					Transaction.Output o = tx.getOutputs().get(i.outputIndex); 
+					UTXO utxo = new UTXO(i.prevTxHash, i.outputIndex);
 
-					for (UTXO utxo :current.getAllUTXO()){
-						if (current.getTxOutput(utxo) == o ){
-							current.removeUTXO(utxo);
-						}
+					if ( current.contains(utxo)){
+						current.removeUTXO(utxo);
 					}
 				}
 				validTxs.add(tx);
